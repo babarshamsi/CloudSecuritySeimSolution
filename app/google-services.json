@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "512956166013",
+    "firebase_url": "https://cloud-security-siem-solution-default-rtdb.firebaseio.com",
+    "project_id": "cloud-security-siem-solution",
+    "storage_bucket": "cloud-security-siem-solution.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:512956166013:android:b52223c2992a7a74ae2614",
+        "android_client_info": {
+          "package_name": "com.example.cloudsecurity"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "512956166013-hfl09cacnvfo6cb1eui2is61taiqo3uc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjavEvJ9gVZl6GureN7UL_MlSM3LOHZSQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "512956166013-hfl09cacnvfo6cb1eui2is61taiqo3uc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
