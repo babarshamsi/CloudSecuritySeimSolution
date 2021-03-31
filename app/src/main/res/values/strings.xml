@@ -22,4 +22,6 @@
     <string name="dies">###</string>
     <string name="log_out">Log Out</string>
 
+    <string name="blocked">Sorry, you are temporary blocked, contact your admin for further Details</string>
+
 </resources>
