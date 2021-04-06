@@ -4,12 +4,18 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
-import androidx.core.content.ContextCompat.getSystemService
 
 
 class GenericUtils {
 
+
     companion object {
+
+        const val APP_TAG = "CLOUD_SECURITY"
+        const val OUTSIDE_OFFICE_PREMISES = "not_in_office"
+        const val ADMIN = "Admin"
+        const val USER = "User"
+
         fun isInternetAvailable(context: Context): Boolean {
             var result = false
             val connectivityManager =

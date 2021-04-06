@@ -2,111 +2,75 @@ package com.example.cloudsecurity
 
 import android.Manifest
 import android.content.Intent
+import android.content.IntentSender
+import android.content.pm.PackageManager
+import android.location.Location
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
+import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import com.abangfadli.shotwatch.ScreenshotData
 import com.abangfadli.shotwatch.ShotWatch
 import com.example.Extentions.default
+import com.example.Utils.GenericUtils
 import com.example.models.User
-import com.github.kayvannj.permission_utils.Func
-import com.github.kayvannj.permission_utils.PermissionUtil
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DatabaseReference
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.storage.FirebaseStorage
-import com.google.firebase.storage.StorageReference
+import kotlinx.android.synthetic.main.activity_home_user.*
 import java.io.File
 
 
-class HomeActivityForUser : AppCompatActivity() {
+class HomeActivityForUser : BaseActivity() {
 
-    private var mDatabase: DatabaseReference? = null
-    private lateinit var firebaseAuth : FirebaseAuth
-    private lateinit var storageReference: StorageReference
-    private lateinit var firebaseStorage: FirebaseStorage
-
-
-    var arrayOfPermissions = arrayOf(
-        "Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.ACCESS_COARSE_LOCATION," +
-                "Manifest.permission.\n" +
-                "            ACCESS_FINE_LOCATION"
-    )
-    var mRequestObject = PermissionUtil.PermissionRequestObject(this, arrayOfPermissions)
-    var REQUEST_CODE_STORAGE = 1
+    protected lateinit var user: User
     var mShotWatch: ShotWatch? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_home)
-
-        initializeDB()
-        checkPermissions()
+        setContentView(R.layout.activity_home_user)
+        init()
         observeScreenShots()
-
-
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        mRequestObject?.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    }
-
-    fun navigateLogOut(view: View) {
-        FirebaseAuth.getInstance().signOut()
-        startActivity(Intent(this, SignInActivity::class.java))
-        finish()
-    }
-
-    fun checkPermissions() {
-        mRequestObject =
-            PermissionUtil.with(this).request(
-                Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            )
-                .onAllGranted(
-                    object : Func() {
-                        override fun call() {
-                            //Happy Path
-                            Toast.makeText(this@HomeActivityForUser, "Granted", Toast.LENGTH_SHORT)
-                                .show()
-                        }
-                    }).onAnyDenied(
-                    object : Func() {
-                        override fun call() {
-                            Toast.makeText(this@HomeActivityForUser, "Denied", Toast.LENGTH_SHORT)
-                                .show()
-                            finish()
-                            //Sad Path
-                        }
-                    })
-                .ask(REQUEST_CODE_STORAGE) // REQUEST_CODE_STORAGE is what ever int you want (should be distinct)
+        setUserData()
 
     }
 
-    // Register to begin receive event
-    override fun onResume() {
-        mShotWatch!!.register()
-        super.onResume()
+    private fun init() {
+        btn_log_out = findViewById(R.id.btn_log_out)
+        btn_log_out.setOnClickListener {
+            FirebaseAuth.getInstance().signOut()
+
+            val intent = Intent(this, SignInActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            startActivity(intent)
+            finish()
+        }
     }
 
-    // Don't forget to unregister when apps goes to background
-    override fun onPause() {
-        mShotWatch!!.unregister()
-        super.onPause()
+
+    private fun setUserData() {
+        mDatabase?.child("users")?.child(firebaseAuth.currentUser?.uid.default())?.get()
+            ?.addOnSuccessListener { it ->
+                val mapper = ObjectMapper()
+                user = mapper.convertValue(it.value, User::class.java)
+                user.apply {
+                    UserName.text = "User Name : ${username}"
+                    UserEmail.text = "User Email : ${email}"
+                    UserRoles.text = "User Role : ${role}"
+                }
+            }?.addOnFailureListener { it ->
+                Log.e(GenericUtils.APP_TAG,it.message.default())
+            }
+
     }
+
+
 
     fun observeScreenShots() {
         val listener = ShotWatch.Listener { screenshotData: ScreenshotData? ->
-            writeNewUser(firebaseAuth.currentUser?.uid, true)
 
             val imageUri = Uri.fromFile(File(screenshotData?.path))
             val riversRef =
@@ -117,6 +81,7 @@ class HomeActivityForUser : AppCompatActivity() {
                         )
                     }
                 }
+            writeNewUser(imageUri.lastPathSegment, firebaseAuth.currentUser?.uid.default(), true)
             val uploadTask = riversRef?.putFile(imageUri)
 
 // Register observers to listen for when the download is done or if it fails
@@ -138,30 +103,143 @@ class HomeActivityForUser : AppCompatActivity() {
         mShotWatch = ShotWatch(getContentResolver(), listener)
     }
 
-    fun initializeDB() {
-        firebaseAuth = FirebaseAuth.getInstance()
-        firebaseStorage = FirebaseStorage.getInstance()
-        storageReference = firebaseStorage.reference
 
-        mDatabase = FirebaseDatabase.getInstance()
-            .getReferenceFromUrl("https://cloud-security-siem-solution-default-rtdb.firebaseio.com/")
-    }
 
-    fun writeNewUser( userId : String?,
+    private fun writeNewUser( imagePath: String? ,userId : String,
         blocked: Boolean
     ) {
-        val user = User(blocked = blocked)
-        mDatabase!!.child("users").child(userId.default()).setValue(user)
-            .addOnSuccessListener {
-                Toast.makeText(applicationContext, "Write Successful", Toast.LENGTH_SHORT)
-                    .show()
-                startActivity(Intent(this, TemporaryBlockedActivity::class.java))
-                finishAffinity()
+        mDatabase?.child("users")?.child(userId)?.child("blocked")?.setValue(blocked)
+//            ?.addOnSuccessListener {
+//                Toast.makeText(applicationContext, "Write Successful", Toast.LENGTH_SHORT)
+//                    .show()
+//                startActivity(Intent(this, TemporaryBlockedActivity::class.java))
+//                finishAffinity()
+//            }?.addOnFailureListener {
+//                Toast.makeText(applicationContext, "Write Failure", Toast.LENGTH_SHORT)
+//                    .show()
+//            }
+        mDatabase?.child("users")?.child(userId)?.child("imagePath")?.setValue(imagePath)?.addOnSuccessListener {
+            Toast.makeText(applicationContext, "Write Image Path", Toast.LENGTH_SHORT)
+                .show()
+            startActivity(Intent(this, TemporaryBlockedActivity::class.java))
+            finishAffinity()
+        }?.addOnFailureListener {
+            Toast.makeText(applicationContext, "Write Image Path Failure", Toast.LENGTH_SHORT)
+                .show()
+        }
+    }
+
+    override fun onConnected(bundle: Bundle?) {
+        val location: Location? =
+            LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient)
+        if (location == null) {
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                checkPermissions()
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return
             }
-            .addOnFailureListener {
-                Toast.makeText(applicationContext, "Write Failure", Toast.LENGTH_SHORT)
-                    .show()
+            LocationServices.FusedLocationApi.requestLocationUpdates(
+                mGoogleApiClient,
+                mLocationRequest,
+                this
+            )
+        } else {
+            //If everything went fine lets get latitude and longitude
+            currentLatitude = location.getLatitude()
+            currentLongitude = location.getLongitude()
+            if (checkIfUserInsideOffice(location.latitude, location.longitude)) {
+                return
             }
+            val intent = Intent(this, TemporaryBlockedActivity::class.java)
+            intent.putExtra("TAG", GenericUtils.OUTSIDE_OFFICE_PREMISES)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            finish()
+        }
+    }
+
+
+    override fun onConnectionSuspended(i: Int) {
+        var j =i
+    }
+
+
+    override fun onConnectionFailed(connectionResult: ConnectionResult) {
+        /*
+             * Google Play services can resolve some errors it detects.
+             * If the error has a resolution, try sending an Intent to
+             * start a Google Play services activity that can resolve
+             * error.
+             */
+        if (connectionResult.hasResolution()) {
+            try {
+                // Start an Activity that tries to resolve the error
+                connectionResult.startResolutionForResult(
+                    this,
+                    CONNECTION_FAILURE_RESOLUTION_REQUEST
+                )
+                /*
+                     * Thrown if Google Play services canceled the original
+                     * PendingIntent
+                     */
+            } catch (e: IntentSender.SendIntentException) {
+                // Log the error
+                e.printStackTrace()
+            }
+        } else {
+            /*
+                 * If no resolution is available, display a dialog to the
+                 * user with the error.
+                 */
+            Toast.makeText(this@HomeActivityForUser,
+                "Location services connection failed with code " + connectionResult.errorCode, Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mShotWatch!!.register()
+        getCurrentUserLocation()
+        //Now lets connect to the API
+        mGoogleApiClient!!.connect()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        mShotWatch!!.unregister()
+        //Disconnect from API onPause()
+        if (mGoogleApiClient!!.isConnected) {
+            LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this)
+            mGoogleApiClient!!.disconnect()
+        }
+    }
+
+    override fun onLocationChanged(location: Location) {
+        currentLatitude = location.getLatitude()
+        currentLongitude = location.getLongitude()
+
+        if (checkIfUserInsideOffice(location.latitude, location.longitude)) {
+            return
+        }
+        val intent = Intent(this, TemporaryBlockedActivity::class.java)
+        intent.putExtra("TAG", GenericUtils.OUTSIDE_OFFICE_PREMISES)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+        finish()
     }
 
 }

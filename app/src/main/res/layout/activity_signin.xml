@@ -57,13 +57,16 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="20dp"
+            android:visibility="gone"
             android:text="@string/forget_your_password"
             android:onClick="NavigateForgetMyPassword"
             android:clickable="true"
             android:gravity="center"
             android:textColor="@color/colorPrimaryDark"/>
 
-        <include layout="@layout/roles_common_view"/>
+        <include
+            android:visibility="gone"
+            layout="@layout/roles_common_view"/>
 
     </TableLayout>
 

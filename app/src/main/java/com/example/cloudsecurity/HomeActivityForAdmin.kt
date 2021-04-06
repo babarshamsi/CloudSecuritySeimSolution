@@ -1,52 +1,107 @@
 package com.example.cloudsecurity
 
 import android.Manifest
-import android.content.DialogInterface
 import android.content.Intent
-import android.content.IntentSender.SendIntentException
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
-import android.widget.Toast
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import androidx.core.app.ActivityCompat
 import com.example.Extentions.default
-import com.example.Utils.GenericUtils.Companion.ADMIN
-import com.example.Utils.GenericUtils.Companion.isInternetAvailable
+import com.example.Utils.GenericUtils.Companion.USER
 import com.example.models.User
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.location.LocationServices
-import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuth.AuthStateListener
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
+import com.google.gson.Gson
+import kotlinx.android.synthetic.main.acticity_home_admin.*
 
 
-class SplashActivity : BaseActivity() {
+class HomeActivityForAdmin : BaseActivity() {
+
+    var arrayList = ArrayList<User>()
+    var userName = ArrayList<String>()
+    lateinit var postListener : ValueEventListener
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_splash)
+        setContentView(R.layout.acticity_home_admin)
+        init()
 
-        if (!isInternetAvailable(this)) {
-            showAlertDialog("Check Your Internet First", "Okay", "Cancel",
-                DialogInterface.OnClickListener { _, i -> finish() },
-                DialogInterface.OnClickListener { _, i -> finish() })
-            return
+
+    }
+
+
+
+     fun getAllUsers() {
+         arrayList.clear()
+         userName.clear()
+         mDatabase?.child("users")
+         postListener = object : ValueEventListener {
+            override fun onCancelled(error: DatabaseError) {
+                TODO("Not yet implemented")
+            }
+
+            override fun onDataChange(snapshot: DataSnapshot) {
+                snapshot.children.forEach {
+                    it.children.forEach {
+                        val mapper = ObjectMapper()
+                        val user = mapper.convertValue(
+                            it.value,
+                            User::class.java
+                        )
+                        if (user.role.equals(USER)) {
+                            arrayList.add(user)
+                            userName.add(user.username.default())
+                        }
+                    }
+
+                }
+
+                val arrayAdapter = ArrayAdapter(
+                    this@HomeActivityForAdmin,
+                    android.R.layout.simple_list_item_1,
+                    userName
+                )
+                adminList.adapter = arrayAdapter
+                adminList.setOnItemClickListener(AdapterView.OnItemClickListener { adapterView, view, i, l ->
+                    val intent = Intent(this@HomeActivityForAdmin, DetailScreenActivity::class.java)
+                    val gson = Gson()
+                    val myJson = gson.toJson(arrayList.get(i))
+                    intent.putExtra("identifier", myJson)
+                    startActivity(intent)
+
+                })
+            }
         }
+         mDatabase?.addValueEventListener(postListener)
+     }
 
-        checkPermissions()
-        checkGPSEnabledOrNot()
+    override fun onStop() {
+        super.onStop()
+        mDatabase?.removeEventListener(postListener)
+    }
 
-        FirebaseApp.initializeApp(this)
-        //Check current user
-        val firebaseAuth = FirebaseAuth.getInstance()
-        mDatabase = FirebaseDatabase.getInstance()
-            .getReferenceFromUrl("https://cloud-security-siem-solution-default-rtdb.firebaseio.com/")
+    private fun init() {
+        btn_log_out = findViewById(R.id.btn_log_out)
+        btn_log_out.setOnClickListener {
+            FirebaseAuth.getInstance().signOut()
+            val intent = Intent(this, SignInActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            startActivity(intent)
+            finish()
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        getAllUsers()
         getCurrentUserLocation()
         //Now lets connect to the API
         mGoogleApiClient!!.connect()
@@ -74,7 +129,7 @@ class SplashActivity : BaseActivity() {
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-
+                checkPermissions()
                 // TODO: Consider calling
                 //    ActivityCompat#requestPermissions
                 // here to request the missing permissions, and then overriding
@@ -93,7 +148,6 @@ class SplashActivity : BaseActivity() {
             //If everything went fine lets get latitude and longitude
             currentLatitude = location.getLatitude()
             currentLongitude = location.getLongitude()
-            firebaseAuth.addAuthStateListener(authStateListener)
         }
     }
 
@@ -118,7 +172,7 @@ class SplashActivity : BaseActivity() {
                      * Thrown if Google Play services canceled the original
                      * PendingIntent
                      */
-            } catch (e: SendIntentException) {
+            } catch (e: IntentSender.SendIntentException) {
                 // Log the error
                 e.printStackTrace()
             }
@@ -127,76 +181,22 @@ class SplashActivity : BaseActivity() {
                  * If no resolution is available, display a dialog to the
                  * user with the error.
                  */
-            Toast.makeText(
-                this@SplashActivity,
-                "Location services connection failed with code " + connectionResult.errorCode,
-                Toast.LENGTH_SHORT
-            ).show()
+//            Toast.makeText(this@HomeActivityForAdmin,
+//                "Location services connection failed with code " + connectionResult.errorCode, Toast.LENGTH_SHORT
+//            ).show()
         }
     }
 
+    /**
+     * If locationChanges change lat and long
+     *
+     *
+     * @param location
+     */
     override fun onLocationChanged(location: Location) {
         currentLatitude = location.getLatitude()
         currentLongitude = location.getLongitude()
     }
 
-    private var authStateListener =
-        AuthStateListener { firebaseAuth ->
-            val firebaseUser = firebaseAuth.currentUser
-            if (firebaseUser == null) {
-                val intent = Intent(this@SplashActivity, SignUpActivity::class.java)
-                startActivity(intent)
-                finish()
-            } else {
-                mDatabase?.child("users")?.child(firebaseUser.uid)?.get()
-                    ?.addOnSuccessListener { it ->
-                        val mapper = ObjectMapper()
-                        val currentUser = mapper.convertValue(it.value, User::class.java)
-                        if (currentUser != null) {
-                            if (currentUser.blocked.default()) {
-                                val intent =
-                                    Intent(
-                                        this@SplashActivity,
-                                        TemporaryBlockedActivity::class.java
-                                    )
-                                startActivity(intent)
-                                finish()
-                            } else {
-                                checkIfUserIsAdmin(currentUser)
-                            }
-                        }
-                        else {
-                            startFromSigUpActivity()
-                        }
-                        }?.addOnFailureListener { it ->
-                        Toast.makeText(this, "Unable to Fetch Value", Toast.LENGTH_SHORT).show()
-                    }
-            }
-        }
 
-    private fun checkIfUserIsAdmin(currentUser: User) {
-        if (currentUser.role?.equals(ADMIN).default()) {
-            val intent =
-                Intent(this@SplashActivity, HomeActivityForAdmin::class.java)
-            startActivity(intent)
-            finish()
-        } else {
-            val intent =
-                Intent(this@SplashActivity, HomeActivityForUser::class.java)
-            startActivity(intent)
-            finish()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-       firebaseAuth.removeAuthStateListener(authStateListener)
-    }
-
-    private fun startFromSigUpActivity() {
-        val intent =
-            Intent(this@SplashActivity, SignUpActivity::class.java)
-        startActivity(intent)
-        finish()
-    }
 }
