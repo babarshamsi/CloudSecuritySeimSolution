@@ -38,20 +38,6 @@ class DetailScreenActivity : BaseActivity() {
         if (user.imagePath.default() != "") {
             try {
                 val localFile = File.createTempFile("lastPathName", "jpg")
-//            val localFile: File = File("lastPathName.jpg")
-//            storageReference =
-//                firebaseStorage.getReferenceFromUrl("gs://cloud-security-siem-solution.appspot.com/users/eXrg2YwJXZewWxS86x55jmY3wd32/screenshot/lastPathName.jpg")
-//                firebaseStorage.getReferenceFromUrl("gs://cloud-security-siem-solution.appspot.com/users/xIUiWkxRdsPlpjwLz75UcoWnniM2/screenshot/Screenshot_20210401-234658_Cloud Security.jpg")
-//            storageReference.getFile(localFile).addOnSuccessListener {
-//                Glide.with(getApplicationContext())
-//                    .load(localFile)
-//                    .into(screenshot)
-//            }.addOnFailureListener {
-//                if (it.message.equals("Object does not exist at location.")) {
-//                    imageNotFound.visibility = VISIBLE
-//                }
-//            }
-//            storageReference = firebaseStorage.getReferenceFromUrl("gs://cloud-security-siem-solution.appspot.com")
                 storageReference.child("users").child(user.userID.default()).child("screenshot")
                     .child(user.imagePath.default())
                     .getFile(localFile)
@@ -64,10 +50,6 @@ class DetailScreenActivity : BaseActivity() {
                             imageNotFound.visibility = VISIBLE
                         }
                     })
-
-//    } catch (e: IOException) {
-//        e.toString()
-//    }
             } catch (e: IOException) {
                 e.toString()
             }
